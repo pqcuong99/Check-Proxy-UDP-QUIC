@@ -1,0 +1,8 @@
+# Mỗi dòng 1 proxy. Dòng bắt đầu bằng # là ghi chú.
+# Các định dạng: host:port | host:port:user:pass | user:pass@host:port | socks5://... | http://...
+#
+# 1.2.3.4:1080
+# user:pass@1.2.3.4:1080
+# 1.2.3.4:1080:user:pass
+# socks5://1.2.3.4:1080
+# http://1.2.3.4:8080

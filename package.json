@@ -1,0 +1,19 @@
+{
+  "name": "proxycheck",
+  "version": "1.0.0",
+  "description": "Kiểm tra proxy có hỗ trợ UDP (SOCKS5 UDP ASSOCIATE) và QUIC hay không",
+  "main": "proxycheck.js",
+  "bin": {
+    "proxycheck": "./proxycheck.js"
+  },
+  "scripts": {
+    "start": "node proxycheck.js",
+    "test:fake": "node test/fake_proxies.js",
+    "test": "node proxycheck.js -f test/test_proxies.txt -v",
+    "gui": "node gui.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT"
+}

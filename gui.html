@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProxyCheck — UDP / QUIC</title>
+<style>
+  :root {
+    --bg: #f3f5f8; --card: #ffffff; --text: #1b2430; --muted: #6b7684; --border: #dde3ea;
+    --accent: #2563eb; --accent-h: #1d4ed8; --ok: #16a34a; --bad: #dc2626; --warn: #d97706; --na: #94a3b8;
+    --mono: ui-monospace, Consolas, "Cascadia Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f141a; --card: #171e26; --text: #e6ebf0; --muted: #8b97a5; --border: #2a333d; --accent: #3b82f6; --accent-h: #2563eb; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  #conn { margin-left: auto; font-size: 12px; color: var(--muted); }
+  #conn.off { color: var(--bad); }
+  main { max-width: 1240px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h3 { margin: 0 0 12px; font-size: 15px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea { font-family: var(--mono); font-size: 13px; min-height: 190px; resize: vertical; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 90px; }
+  .row > div.w-port { flex: 0 0 90px; }
+  .row > div.w-type { flex: 0 0 120px; }
+  .btns { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font: inherit; white-space: nowrap; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { background: var(--accent-h); }
+  button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--text); }
+  .check input { width: auto; }
+  .progress { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin-top: 14px; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { flex: 1; min-width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 20px; line-height: 1.1; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .stat.ok b { color: var(--ok); } .stat.bad b { color: var(--bad); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; min-width: 46px; text-align: center; }
+  .b-OK { background: var(--ok); } .b-NO, .b-FAIL { background: var(--bad); } .b-NA, .b-SKIP { background: var(--na); }
+  .b-wait { background: var(--warn); }
+  .b-run { background: var(--accent); }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar h3 { margin: 0; }
+  .toolbar .sp { flex: 1; }
+  .toolbar select { width: auto; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  th { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+  tr.main { cursor: pointer; }
+  tr.main:hover td { background: rgba(127,127,127,.07); }
+  tr.detail td { background: rgba(127,127,127,.05); padding: 10px 14px 12px 40px; }
+  tr.detail dl { display: grid; grid-template-columns: 90px 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+  tr.detail dt { color: var(--muted); }
+  tr.detail dd { margin: 0; font-family: var(--mono); word-break: break-word; }
+  td.note { color: var(--muted); font-size: 13px; }
+  td.note.err { color: var(--bad); }
+  td.nowrap { white-space: nowrap; }
+  #empty { padding: 20px; text-align: center; }
+  .legend { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend b { color: var(--text); }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--card); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ProxyCheck</h1>
+  <span class="sub">Kiểm tra proxy có hỗ trợ UDP và QUIC hay không</span>
+  <span id="conn">đang kết nối…</span>
+</header>
+
+<main>
+  <div class="grid2">
+    <section class="card">
+      <h3>1. Nhập proxy</h3>
+      <label>Danh sách — mỗi dòng 1 proxy: <span class="mono">ip:port:user:pass</span>, <span class="mono">ip:port</span>, <span class="mono">ip|port|user|pass</span>, <span class="mono">ip|port</span>, <span class="mono">HTTP|host|port|user|pass</span> (hoặc SOCKS5, SOCKS4), <span class="mono">user:pass@ip:port</span>, <span class="mono">socks5://…</span></label>
+      <textarea id="list" spellcheck="false" placeholder="1.2.3.4:1080:user:pass
+1.2.3.4|1080|user|pass
+HTTP|proxy.example.com|10000|user|pass
+5.6.7.8|1080
+5.6.7.8:1080
+socks5://user:pass@9.9.9.9:1080"></textarea>
+      <div class="hint" style="margin-top:4px"><span id="listCount">0</span> proxy trong danh sách</div>
+
+      <hr>
+      <label>Hoặc nhập riêng từng giá trị</label>
+      <div class="row">
+        <div><label>IP / host</label><input id="ip" placeholder="1.2.3.4" autocomplete="off"></div>
+        <div class="w-port"><label>Port</label><input id="port" placeholder="1080" inputmode="numeric" autocomplete="off"></div>
+        <div><label>User (bỏ trống nếu không có)</label><input id="user" autocomplete="off"></div>
+        <div><label>Pass</label><input id="pass" autocomplete="off"></div>
+        <div class="w-type"><label>Loại</label>
+          <select id="ptype">
+            <option value="">Tự nhận dạng</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="http">HTTP</option>
+            <option value="socks4">SOCKS4</option>
+          </select>
+        </div>
+      </div>
+      <div class="btns">
+        <button id="btnAdd">+ Thêm vào danh sách</button>
+        <button id="btnOne" class="primary">Kiểm tra ngay proxy này</button>
+        <span class="hint" id="oneHint"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>2. Tuỳ chọn &amp; chạy</h3>
+      <div class="row">
+        <div><label>Số luồng (kiểm tra đồng thời)</label><input id="threads" type="number" min="1" max="200" value="20"></div>
+        <div><label>Timeout mỗi bước (ms)</label><input id="timeout" type="number" min="500" max="60000" step="500" value="5000"></div>
+        <div class="w-type"><label>Ép loại proxy</label>
+          <select id="ftype">
+            <option value="">Tự nhận dạng</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="http">HTTP</option>
+            <option value="socks4">SOCKS4</option>
+          </select>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="quic" checked> Test QUIC (gửi gói QUIC v1 Initial thật tới www.cloudflare.com:443 qua proxy)</label>
+
+      <div class="btns">
+        <button id="btnStart" class="primary">▶ Kiểm tra danh sách</button>
+        <button id="btnStop" class="danger" disabled>■ Dừng</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div class="hint" id="progText" style="margin-top:6px">Sẵn sàng.</div>
+
+      <div class="stats">
+        <div class="stat"><b id="sTotal">0</b><span>tổng</span></div>
+        <div class="stat"><b id="sDone">0</b><span>đã xong</span></div>
+        <div class="stat ok"><b id="sTcp">0</b><span>TCP OK</span></div>
+        <div class="stat ok"><b id="sUdp">0</b><span>UDP OK</span></div>
+        <div class="stat ok"><b id="sQuic">0</b><span>QUIC OK</span></div>
+        <div class="stat bad"><b id="sErr">0</b><span>lỗi / chết</span></div>
+      </div>
+
+      <div class="legend">
+        <b>UDP OK</b> = proxy nhận lệnh UDP ASSOCIATE <i>và</i> gói UDP thật (DNS) đi qua relay có trả lời &nbsp;·&nbsp;
+        <b>UDP FAIL</b> = nhận lệnh nhưng relay không chuyển gói (UDP "giả") &nbsp;·&nbsp;
+        <b>UDP NO</b> = không hỗ trợ (từ chối lệnh / HTTP CONNECT / SOCKS4) &nbsp;·&nbsp;
+        <b>QUIC OK</b> = server HTTP/3 trả lời gói QUIC v1 gửi qua proxy (ServerHello / Retry / Version Negotiation)
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="toolbar">
+      <h3>3. Kết quả</h3>
+      <select id="filter">
+        <option value="all">Tất cả</option>
+        <option value="udp">Chỉ UDP OK</option>
+        <option value="quic">Chỉ QUIC OK</option>
+        <option value="bad">Không đạt / lỗi</option>
+      </select>
+      <span class="hint" id="filterCount"></span>
+      <span class="sp"></span>
+      <button id="cpUdp">Copy proxy UDP OK</button>
+      <button id="cpQuic">Copy proxy QUIC OK</button>
+      <button id="dlCsv">Tải CSV</button>
+      <button id="dlJson">Tải JSON</button>
+      <button id="btnClear">Xoá kết quả</button>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>Proxy</th><th>Loại</th><th>TCP</th><th>UDP</th><th>QUIC</th><th>ms</th><th>Ghi chú (bấm dòng để xem chi tiết)</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="empty" class="hint">Chưa có kết quả. Nhập proxy rồi bấm <b>Kiểm tra</b>.</div>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let rows = [];          // { index, proxy, result|null, tr, trd }
+  let running = false;
+  let toastTimer = null;
+
+  // ---------- lưu / khôi phục ô nhập ----------
+  const PERSIST = ['list', 'threads', 'timeout', 'ftype', 'ptype'];
+  try {
+    const saved = JSON.parse(localStorage.getItem('proxycheck.form') || '{}');
+    for (const k of PERSIST) if (saved[k] != null) $(k).value = saved[k];
+    if (saved.quic != null) $('quic').checked = !!saved.quic;
+  } catch (_) { /* bỏ qua */ }
+  function persist() {
+    try {
+      const o = {}; for (const k of PERSIST) o[k] = $(k).value; o.quic = $('quic').checked;
+      localStorage.setItem('proxycheck.form', JSON.stringify(o));
+    } catch (_) { /* bỏ qua */ }
+  }
+  for (const k of [...PERSIST, 'quic']) $(k).addEventListener('input', persist);
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------- danh sách ----------
+  const parseList = text => [...new Set(text.split(/\r?\n/).map(l => l.replace(/#.*$/, '').trim()).filter(Boolean))];
+  function updateListCount() { $('listCount').textContent = parseList($('list').value).length; }
+  $('list').addEventListener('input', updateListCount);
+  updateListCount();
+
+  // ---------- nhập riêng từng giá trị ----------
+  function composeOne() {
+    const ip = $('ip').value.trim(), port = $('port').value.trim(), user = $('user').value.trim(), pass = $('pass').value, type = $('ptype').value;
+    if (!ip || !port) { $('oneHint').textContent = 'Cần nhập IP/host và port.'; return null; }
+    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535) { $('oneHint').textContent = 'Port không hợp lệ.'; return null; }
+    let s = `${ip}:${port}`;
+    if (user) s += `:${user}:${pass}`;
+    if (type) s = `${type}://${s}`;
+    $('oneHint').textContent = '';
+    return s;
+  }
+  $('btnAdd').addEventListener('click', () => {
+    const s = composeOne(); if (!s) return;
+    const ta = $('list');
+    ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/, '') + '\n' : '') + s + '\n';
+    updateListCount(); persist();
+    $('ip').value = $('port').value = $('user').value = $('pass').value = '';
+    $('ip').focus();
+    toast('Đã thêm ' + s);
+  });
+  $('btnOne').addEventListener('click', () => { const s = composeOne(); if (s) start([s]); });
+  for (const id of ['ip', 'port', 'user', 'pass']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btnOne').click(); });
+
+  // ---------- chạy / dừng ----------
+  async function start(list) {
+    if (running) { toast('Đang chạy, hãy bấm Dừng trước.'); return; }
+    if (!list.length) { toast('Chưa có proxy nào.'); return; }
+    const body = { proxies: list, options: { threads: +$('threads').value, timeout: +$('timeout').value, noQuic: !$('quic').checked, type: $('ftype').value } };
+    const r = await fetch('/api/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) toast(j.error || 'Lỗi không rõ');
+  }
+  $('btnStart').addEventListener('click', () => start(parseList($('list').value)));
+  $('btnStop').addEventListener('click', async () => {
+    await fetch('/api/stop', { method: 'POST' });
+    $('progText').textContent = 'Đang dừng… (chờ các proxy đang kiểm tra dở xong)';
+    $('btnStop').disabled = true;
+  });
+
+  function setRunning(v) {
+    running = v;
+    $('btnStart').disabled = v; $('btnOne').disabled = v; $('btnStop').disabled = !v;
+  }
+
+  // ---------- bảng kết quả ----------
+  const badge = (s, cls) => `<span class="badge ${cls || ('b-' + String(s).replace('/', ''))}">${esc(s)}</span>`;
+  const shortNote = r => {
+    if (!r) return '';
+    if (r.error) return r.error;
+    if (r.tcp !== 'OK') return r.tcp_detail;
+    if (r.udp !== 'OK') return r.udp_detail;
+    if (r.quic !== 'OK') return r.quic_detail;
+    return 'UDP và QUIC đều hoạt động qua proxy này';
+  };
+
+  function buildRows(items) {
+    const tb = $('tbody'); tb.innerHTML = '';
+    rows = items.map(it => {
+      const tr = document.createElement('tr'); tr.className = 'main';
+      const trd = document.createElement('tr'); trd.className = 'detail'; trd.hidden = true;
+      tr.addEventListener('click', () => { if (trd.innerHTML) trd.hidden = !trd.hidden; });
+      tb.appendChild(tr); tb.appendChild(trd);
+      const row = { index: it.index, proxy: it.proxy, result: null, tr, trd };
+      renderRow(row);
+      return row;
+    });
+    $('empty').style.display = rows.length ? 'none' : '';
+    applyFilter();
+  }
+
+  function renderRow(row, state) {
+    const r = row.result;
+    const s = state || (r ? '' : (running ? 'wait' : 'stopped'));
+    let cells;
+    if (r) {
+      cells = `<td>${row.index + 1}</td><td class="mono">${esc(row.proxy)}</td><td class="nowrap">${esc(r.type || '?')}</td>` +
+        `<td>${badge(r.tcp)}</td><td>${badge(r.udp)}</td><td>${badge(r.quic)}</td>` +
+        `<td class="nowrap">${r.latency_ms != null ? r.latency_ms : '–'}</td>` +
+        `<td class="note${r.error ? ' err' : ''}">${esc(shortNote(r))}</td>`;
+      row.trd.innerHTML = `<td colspan="8"><dl>` +
+        `<dt>Loại</dt><dd>${esc(r.type)}${r.auth ? ' · xác thực: ' + esc(r.auth) : ''}</dd>` +
+        `<dt>TCP</dt><dd>${esc(r.tcp_detail || '')}</dd>` +
+        `<dt>UDP</dt><dd>${esc(r.udp_detail || '')}${r.udp_associate ? '<br>ASSOCIATE trả về: ' + esc(r.udp_associate) : ''}${r.udp_relay ? ' · relay dùng: ' + esc(r.udp_relay) : ''}</dd>` +
+        `<dt>QUIC</dt><dd>${esc(r.quic_detail || '')}</dd>` +
+        (r.error ? `<dt>Lỗi</dt><dd>${esc(r.error)}</dd>` : '') + `</dl></td>`;
+    } else {
+      const b = s === 'wait' ? badge('đang chờ', 'b-wait') : badge('đã dừng', 'b-NA');
+      cells = `<td>${row.index + 1}</td><td class="mono">${esc(row.proxy)}</td><td>–</td><td>${b}</td><td></td><td></td><td></td><td></td>`;
+      row.trd.innerHTML = '';
+    }
+    row.tr.innerHTML = cells;
+  }
+
+  function applyFilter() {
+    const f = $('filter').value;
+    let n = 0;
+    for (const row of rows) {
+      const r = row.result;
+      let show = true;
+      if (f === 'udp') show = !!r && r.udp === 'OK';
+      else if (f === 'quic') show = !!r && r.quic === 'OK';
+      else if (f === 'bad') show = !!r && (r.error || r.tcp !== 'OK' || r.udp !== 'OK');
+      row.tr.hidden = !show; if (!show) row.trd.hidden = true;
+      if (show) n++;
+    }
+    $('filterCount').textContent = f === 'all' ? '' : `${n} dòng`;
+  }
+  $('filter').addEventListener('change', applyFilter);
+
+  function updateStats(done, total) {
+    const res = rows.map(r => r.result).filter(Boolean);
+    const cnt = k => res.filter(r => r[k] === 'OK').length;
+    $('sTotal').textContent = total != null ? total : rows.length;
+    $('sDone').textContent = done != null ? done : res.length;
+    $('sTcp').textContent = cnt('tcp'); $('sUdp').textContent = cnt('udp'); $('sQuic').textContent = cnt('quic');
+    $('sErr').textContent = res.filter(r => r.error).length;
+    const t = total != null ? total : rows.length, d = done != null ? done : res.length;
+    $('bar').style.width = t ? (100 * d / t) + '%' : '0';
+  }
+
+  // ---------- SSE ----------
+  function loadSnapshot(job) {
+    if (!job) return;
+    setRunning(job.running);
+    buildRows(job.items);
+    job.results.forEach((r, i) => { if (r && rows[i]) { rows[i].result = r; renderRow(rows[i]); } });
+    if (!job.running) rows.forEach(row => { if (!row.result) renderRow(row, 'stopped'); });
+    updateStats(job.done, job.total);
+    applyFilter();
+    $('progText').textContent = job.running ? `Đang kiểm tra… ${job.done}/${job.total}` : `Xong ${job.done}/${job.total}${job.stopped ? ' (đã dừng)' : ''}`;
+  }
+  function connect() {
+    const es = new EventSource('/api/events');
+    es.addEventListener('snapshot', e => { $('conn').textContent = 'đã kết nối'; $('conn').className = ''; loadSnapshot(JSON.parse(e.data).job); });
+    es.addEventListener('start', e => {
+      const j = JSON.parse(e.data);
+      setRunning(true); buildRows(j.items); updateStats(0, j.total);
+      $('progText').textContent = `Đang kiểm tra… 0/${j.total}`;
+    });
+    es.addEventListener('result', e => {
+      const j = JSON.parse(e.data);
+      const row = rows[j.index]; if (!row) return;
+      row.result = j.result; renderRow(row); applyFilter(); updateStats(j.done, j.total);
+      $('progText').textContent = `Đang kiểm tra… ${j.done}/${j.total}`;
+    });
+    es.addEventListener('done', e => {
+      const j = JSON.parse(e.data);
+      setRunning(false);
+      rows.forEach(row => { if (!row.result) renderRow(row, 'stopped'); });
+      updateStats(j.done, j.total);
+      $('progText').textContent = `Xong ${j.done}/${j.total}${j.stopped ? ' (đã dừng)' : ''}`;
+      toast(j.stopped ? 'Đã dừng.' : 'Kiểm tra xong.');
+    });
+    es.onerror = () => { $('conn').textContent = 'mất kết nối tới gui.js — đang thử lại…'; $('conn').className = 'off'; };
+  }
+  connect();
+
+  // ---------- xuất ----------
+  const results = () => rows.map(r => r.result).filter(Boolean);
+  async function copyText(text, label) {
+    if (!text) { toast('Không có proxy nào ' + label); return; }
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    toast(`Đã copy ${text.split('\n').length} proxy ${label}`);
+  }
+  $('cpUdp').addEventListener('click', () => copyText(results().filter(r => r.udp === 'OK').map(r => r.proxy).join('\n'), 'UDP OK'));
+  $('cpQuic').addEventListener('click', () => copyText(results().filter(r => r.quic === 'OK').map(r => r.proxy).join('\n'), 'QUIC OK'));
+
+  function download(name, content, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  $('dlCsv').addEventListener('click', () => {
+    const cols = ['proxy', 'type', 'auth', 'latency_ms', 'tcp', 'tcp_detail', 'udp', 'udp_associate', 'udp_relay', 'udp_detail', 'quic', 'quic_level', 'quic_detail', 'error'];
+    const q = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [cols.join(','), ...results().map(r => cols.map(c => q(r[c])).join(','))].join('\n') + '\n';
+    download(`proxycheck-${stamp()}.csv`, '﻿' + csv, 'text/csv;charset=utf-8');
+  });
+  $('dlJson').addEventListener('click', () => download(`proxycheck-${stamp()}.json`, JSON.stringify(results(), null, 2), 'application/json'));
+  $('btnClear').addEventListener('click', () => {
+    if (running) { toast('Đang chạy, hãy Dừng trước.'); return; }
+    rows = []; $('tbody').innerHTML = ''; $('empty').style.display = ''; updateStats(0, 0); $('progText').textContent = 'Sẵn sàng.';
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# SOCKS5 co UDP
+127.0.0.1:1080
+socks5://127.0.0.1:1080
+# SOCKS5 can user/pass
+test:123@127.0.0.1:1081
+127.0.0.1:1081:test:123
+127.0.0.1:1081            # thieu pass
+wrong:pw@127.0.0.1:1081   # sai pass
+# SOCKS5 khong ho tro UDP
+127.0.0.1:1082
+# SOCKS5 UDP ASSOCIATE OK nhung relay chet
+127.0.0.1:1083
+# HTTP proxy
+127.0.0.1:3128
+http://127.0.0.1:3128
+# SOCKS4
+127.0.0.1:1084
+# cong khong mo
+127.0.0.1:1099
